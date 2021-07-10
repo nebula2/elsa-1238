@@ -1,6 +1,10 @@
+using Elsa;
+using Elsa.Persistence.EntityFramework.Core.Extensions;
+using Elsa.Persistence.EntityFramework.SqlServer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,6 +28,34 @@ namespace IssueSample
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddRazorPages();
+
+            var elsaSection = Configuration.GetSection("Elsa");
+
+            services.AddElsa(elsa =>
+            {
+                elsa
+                    .UseEntityFrameworkPersistence(ef =>
+                        DbContextOptionsBuilderExtensions.UseSqlServer(ef,
+                            Configuration.GetConnectionString("Default")))
+                    .AddConsoleActivities()
+                    .AddHttpActivities(elsaSection.GetSection("Server").Bind)
+                    .AddQuartzTemporalActivities()
+                    .AddJavaScriptActivities()
+                    .AddWorkflowsFrom<Startup>();
+            });
+
+            services.AddElsaApiEndpoints();
+            services.Configure<ApiVersioningOptions>(options =>
+            {
+                options.UseApiBehavior = false;
+            });
+
+            services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowAnyOrigin()
+                .WithExposedHeaders("Content-Disposition"))
+            );
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -41,15 +73,16 @@ namespace IssueSample
             }
 
             app.UseHttpsRedirection();
+            app.UseCors();
             app.UseStaticFiles();
-
             app.UseRouting();
-
             app.UseAuthorization();
-
+            app.UseHttpActivities();
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapRazorPages();
+                endpoints.MapControllers();
+                endpoints.MapFallbackToPage("/_Host");
             });
         }
     }
